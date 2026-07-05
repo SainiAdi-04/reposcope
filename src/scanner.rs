@@ -49,17 +49,9 @@ pub fn scan_one(path: &Path) -> RepoStatus {
     };
 
     let branch = if head.is_branch() {
-        BranchState::Named(
-            head.shorthand()
-                .unwrap_or("unknown")
-                .to_string(),
-        )
+        BranchState::Named(head.shorthand().unwrap_or("unknown").to_string())
     } else {
-        BranchState::Detached(
-            head.shorthand()
-                .unwrap_or("unknown")
-                .to_string(),
-        )
+        BranchState::Detached(head.shorthand().unwrap_or("unknown").to_string())
     };
 
     let (ahead, behind) = compute_ahead_behind(&repo, &head);
@@ -131,10 +123,7 @@ pub fn scan_one(path: &Path) -> RepoStatus {
     }
 }
 
-fn compute_ahead_behind(
-    repo: &git2::Repository,
-    head: &git2::Reference,
-) -> (u32, u32) {
+fn compute_ahead_behind(repo: &git2::Repository, head: &git2::Reference) -> (u32, u32) {
     let local_oid = match head.peel_to_commit() {
         Ok(c) => c.id(),
         Err(_) => return (0, 0),

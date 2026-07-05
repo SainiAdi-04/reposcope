@@ -37,15 +37,13 @@ fn load_config() -> Result<Config, Error> {
         return Ok(default);
     }
 
-    let contents =
-        std::fs::read_to_string(&path).map_err(|e| Error::ConfigIo(e.to_string()))?;
+    let contents = std::fs::read_to_string(&path).map_err(|e| Error::ConfigIo(e.to_string()))?;
     toml::from_str(&contents).map_err(|e| Error::ConfigParse(e.to_string()))
 }
 
 fn save_config(config: &Config) -> Result<(), Error> {
     let path = config_path();
-    let contents =
-        toml::to_string(config).map_err(|e| Error::ConfigParse(e.to_string()))?;
+    let contents = toml::to_string(config).map_err(|e| Error::ConfigParse(e.to_string()))?;
     std::fs::write(&path, &contents).map_err(|e| Error::ConfigIo(e.to_string()))
 }
 

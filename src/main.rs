@@ -26,7 +26,7 @@ fn main() {
                 std::process::exit(1);
             }
         },
-        Some(Commands::List) | None => match config::list_projects() {
+        Some(Commands::List) => match config::list_projects() {
             Ok(projects) => {
                 if projects.is_empty() {
                     println!("no projects registered");
@@ -41,6 +41,10 @@ fn main() {
                 std::process::exit(1);
             }
         },
+        None => {
+            eprintln!("error: dashboard TUI is not implemented yet");
+            std::process::exit(1);
+        }
         Some(Commands::DebugScan { path }) => {
             let status = scanner::scan_one(Path::new(&path));
             println!("{status:#?}");
