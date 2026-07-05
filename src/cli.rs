@@ -1,0 +1,18 @@
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "reposcope", about = "Terminal dashboard for local git repos")]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Add a git repository to tracking
+    Add { path: String },
+    /// Remove a tracked repository by name or path
+    Remove { name_or_path: String },
+    /// List tracked repositories
+    List,
+}
