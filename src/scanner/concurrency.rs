@@ -49,3 +49,48 @@ fn error_status(project: Project, message: &str) -> RepoStatus {
         error: Some(message.to_string()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn scan_all_returns_empty_for_no_projects() {
+        assert!(scan_all(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn scan_all_keeps_results_ordered_and_captures_broken_repo() {
+        let repo_root = std::env::current_dir().expect("test runs from crate root");
+        let mut projects: Vec<Project> = (0..10)
+            .map(|index| project(format!("repo-{index}"), repo_root.clone()))
+            .collect();
+
+        projects.push(project(
+            "missing-repo",
+            std::env::temp_dir().join("reposcope-phase3-missing-repo"),
+        ));
+
+        let statuses = scan_all(projects);
+
+        assert_eq!(statuses.len(), 11);
+        for (index, status) in statuses.iter().take(10).enumerate() {
+            assert_eq!(status.project.name, format!("repo-{index}"));
+            assert!(status.error.is_none());
+        }
+
+        let missing = statuses.last().expect("missing repo status exists");
+        assert_eq!(missing.project.name, "missing-repo");
+        assert!(missing.error.is_some());
+    }
+
+    fn project(name: impl Into<String>, path: PathBuf) -> Project {
+        Project {
+            name: name.into(),
+            path,
+            stale_threshold_days: None,
+        }
+    }
+}
