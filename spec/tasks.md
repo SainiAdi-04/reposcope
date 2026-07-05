@@ -35,8 +35,8 @@ Phased so each milestone is independently runnable/demoable. Maps back to requir
   the slowest single repo, not the sum of all repos.
 
 ## Phase 4 — Staleness (FR3)
-- [ ] Implement `is_stale` per design.md §6 rule.
-- [ ] Global `stale_threshold_days` in config, optional per-project override.
+- [x] Implement `is_stale` per design.md §6 rule.
+- [x] Global `stale_threshold_days` in config, optional per-project override.
 - **Acceptance**: A repo with an old last-commit and no dirty files is flagged stale; the same
   repo with an uncommitted change is NOT flagged stale.
 
