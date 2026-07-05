@@ -18,4 +18,7 @@ pub enum Commands {
     /// Debug-scan a single repository (hidden, for Phase 2 verification)
     #[command(hide = true)]
     DebugScan { path: String },
+    /// Debug-scan all registered repositories (hidden, for Phase 3 verification)
+    #[command(hide = true)]
+    DebugScanAll,
 }

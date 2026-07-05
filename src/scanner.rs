@@ -2,6 +2,8 @@ use std::path::Path;
 
 use crate::model::{BranchState, CommitInfo, Project, RepoStatus};
 
+pub mod concurrency;
+
 pub fn scan_one(path: &Path) -> RepoStatus {
     let project = Project {
         name: path
@@ -12,7 +14,13 @@ pub fn scan_one(path: &Path) -> RepoStatus {
         stale_threshold_days: None,
     };
 
-    let repo = match git2::Repository::open(path) {
+    scan_project(project)
+}
+
+pub fn scan_project(project: Project) -> RepoStatus {
+    let path = project.path.clone();
+
+    let repo = match git2::Repository::open(&path) {
         Ok(r) => r,
         Err(e) => {
             return RepoStatus {

@@ -52,5 +52,18 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Commands::DebugScanAll) => match config::list_projects() {
+            Ok(projects) => {
+                let statuses = scanner::concurrency::scan_all(projects);
+                println!("{statuses:#?}");
+                if statuses.iter().any(|status| status.error.is_some()) {
+                    std::process::exit(1);
+                }
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        },
     }
 }
