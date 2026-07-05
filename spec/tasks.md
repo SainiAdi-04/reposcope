@@ -27,9 +27,9 @@ Phased so each milestone is independently runnable/demoable. Maps back to requir
   status` / `git log -1` output for both.
 
 ## Phase 3 — Concurrent multi-repo scan (FR6, design.md §4b-d)
-- [ ] `scanner/concurrency.rs`: fan out scan across all registered projects using
+- [x] `scanner/concurrency.rs`: fan out scan across all registered projects using
       `std::thread::scope` (or bounded worker pool if project count could exceed ~30).
-- [ ] Errors per-repo captured into `RepoStatus.error`, never panic the whole scan (NFR3).
+- [x] Errors per-repo captured into `RepoStatus.error`, never panic the whole scan (NFR3).
 - **Acceptance**: Add 10+ repos (including one intentionally broken/missing path), scan
   completes without panicking, broken repo shows as an error entry, total time is close to
   the slowest single repo, not the sum of all repos.
