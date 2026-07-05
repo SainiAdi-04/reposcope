@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use chrono::{Duration, Utc};
+
 use crate::model::{BranchState, CommitInfo, Project, RepoStatus};
 
 pub mod concurrency;
@@ -117,6 +119,8 @@ pub fn scan_project(project: Project) -> RepoStatus {
         }
     }
 
+    let is_stale = is_stale(&last_commit, staged, unstaged, untracked, &project);
+
     RepoStatus {
         project,
         branch,
@@ -126,9 +130,28 @@ pub fn scan_project(project: Project) -> RepoStatus {
         unstaged,
         untracked,
         last_commit,
-        is_stale: false,
+        is_stale,
         error: None,
     }
+}
+
+fn is_stale(
+    last_commit: &Option<CommitInfo>,
+    staged: u32,
+    unstaged: u32,
+    untracked: u32,
+    project: &Project,
+) -> bool {
+    if staged > 0 || unstaged > 0 || untracked > 0 {
+        return false;
+    }
+
+    let Some(commit) = last_commit else {
+        return false;
+    };
+
+    let threshold_days = project.stale_threshold_days.unwrap_or(7);
+    Utc::now().signed_duration_since(commit.author_date) > Duration::days(threshold_days.into())
 }
 
 fn compute_ahead_behind(repo: &git2::Repository, head: &git2::Reference) -> (u32, u32) {
@@ -160,5 +183,105 @@ fn compute_ahead_behind(repo: &git2::Repository, head: &git2::Reference) -> (u32
     match repo.graph_ahead_behind(local_oid, upstream_oid) {
         Ok((a, b)) => (a as u32, b as u32),
         Err(_) => (0, 0),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use git2::{Repository, Signature, Time};
+
+    use super::*;
+
+    #[test]
+    fn clean_repo_with_old_last_commit_is_stale() -> Result<(), Box<dyn std::error::Error>> {
+        let repo_path = create_repo_with_commit("old-clean", 10)?;
+        let status = scan_project(project(repo_path, Some(7)));
+
+        assert!(status.error.is_none());
+        assert!(status.is_stale);
+
+        Ok(())
+    }
+
+    #[test]
+    fn dirty_repo_with_old_last_commit_is_not_stale() -> Result<(), Box<dyn std::error::Error>> {
+        let repo_path = create_repo_with_commit("old-dirty", 10)?;
+        fs::write(repo_path.join("tracked.txt"), "changed")?;
+
+        let status = scan_project(project(repo_path, Some(7)));
+
+        assert!(status.error.is_none());
+        assert!(!status.is_stale);
+        assert_eq!(status.unstaged, 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn clean_repo_newer_than_threshold_is_not_stale() -> Result<(), Box<dyn std::error::Error>> {
+        let repo_path = create_repo_with_commit("fresh-clean", 1)?;
+        let status = scan_project(project(repo_path, Some(7)));
+
+        assert!(status.error.is_none());
+        assert!(!status.is_stale);
+
+        Ok(())
+    }
+
+    fn create_repo_with_commit(
+        name: &str,
+        age_days: i64,
+    ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let path = unique_temp_path(name)?;
+        fs::create_dir_all(&path)?;
+
+        let repo = Repository::init(&path)?;
+        fs::write(path.join("tracked.txt"), "initial")?;
+
+        let mut index = repo.index()?;
+        index.add_path(Path::new("tracked.txt"))?;
+        index.write()?;
+        let tree_id = index.write_tree()?;
+        let tree = repo.find_tree(tree_id)?;
+        let commit_time = Utc::now() - Duration::days(age_days);
+        let signature = Signature::new(
+            "Reposcope Test",
+            "reposcope@example.invalid",
+            &Time::new(commit_time.timestamp(), 0),
+        )?;
+
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "test commit",
+            &tree,
+            &[],
+        )?;
+
+        drop(tree);
+        drop(repo);
+
+        Ok(path)
+    }
+
+    fn unique_temp_path(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+        Ok(std::env::temp_dir().join(format!("reposcope-{name}-{nanos}")))
+    }
+
+    fn project(path: PathBuf, stale_threshold_days: Option<u32>) -> Project {
+        Project {
+            name: path
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| "test-repo".to_string()),
+            path,
+            stale_threshold_days,
+        }
     }
 }
