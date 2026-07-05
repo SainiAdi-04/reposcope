@@ -44,6 +44,9 @@ fn main() {
         Some(Commands::DebugScan { path }) => {
             let status = scanner::scan_one(Path::new(&path));
             println!("{status:#?}");
+            if status.error.is_some() {
+                std::process::exit(1);
+            }
         }
     }
 }
