@@ -106,5 +106,44 @@ pub fn remove_project(name_or_path: &str) -> Result<(), Error> {
 
 pub fn list_projects() -> Result<Vec<Project>, Error> {
     let config = load_config()?;
-    Ok(config.projects)
+    Ok(projects_with_effective_threshold(config))
+}
+
+fn projects_with_effective_threshold(config: Config) -> Vec<Project> {
+    let global_threshold = config.stale_threshold_days;
+
+    config
+        .projects
+        .into_iter()
+        .map(|mut project| {
+            if project.stale_threshold_days.is_none() {
+                project.stale_threshold_days = Some(global_threshold);
+            }
+            project
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn applies_global_stale_threshold_to_projects_without_override() {
+        let projects = projects_with_effective_threshold(Config {
+            stale_threshold_days: 14,
+            projects: vec![project("default", None), project("custom", Some(3))],
+        });
+
+        assert_eq!(projects[0].stale_threshold_days, Some(14));
+        assert_eq!(projects[1].stale_threshold_days, Some(3));
+    }
+
+    fn project(name: &str, stale_threshold_days: Option<u32>) -> Project {
+        Project {
+            name: name.to_string(),
+            path: PathBuf::from(format!("/tmp/{name}")),
+            stale_threshold_days,
+        }
+    }
 }
