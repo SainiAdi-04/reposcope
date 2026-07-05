@@ -15,4 +15,7 @@ pub enum Commands {
     Remove { name_or_path: String },
     /// List tracked repositories
     List,
+    /// Debug-scan a single repository (hidden, for Phase 2 verification)
+    #[command(hide = true)]
+    DebugScan { path: String },
 }

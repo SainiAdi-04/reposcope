@@ -2,9 +2,11 @@ mod cli;
 mod config;
 mod error;
 mod model;
+mod scanner;
 
 use clap::Parser;
 use cli::{Cli, Commands};
+use std::path::Path;
 
 fn main() {
     let cli = Cli::parse();
@@ -39,5 +41,9 @@ fn main() {
                 std::process::exit(1);
             }
         },
+        Some(Commands::DebugScan { path }) => {
+            let status = scanner::scan_one(Path::new(&path));
+            println!("{status:#?}");
+        }
     }
 }
