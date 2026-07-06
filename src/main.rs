@@ -3,6 +3,7 @@ mod config;
 mod error;
 mod model;
 mod scanner;
+mod tui;
 
 use clap::Parser;
 use cli::{Cli, Commands};
@@ -41,10 +42,15 @@ fn main() {
                 std::process::exit(1);
             }
         },
-        None => {
-            eprintln!("error: dashboard TUI is not implemented yet");
-            std::process::exit(1);
-        }
+        None => match config::list_projects()
+            .and_then(|projects| tui::run(projects).map_err(|e| error::Error::Tui(e.to_string())))
+        {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        },
         Some(Commands::DebugScan { path }) => {
             let status = scanner::scan_one(Path::new(&path));
             println!("{status:#?}");

@@ -16,6 +16,14 @@ pub enum BranchState {
     Detached(String),
 }
 
+impl BranchState {
+    pub fn label(&self) -> &str {
+        match self {
+            BranchState::Named(name) | BranchState::Detached(name) => name,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CommitInfo {
     pub short_hash: String,
@@ -35,4 +43,21 @@ pub struct RepoStatus {
     pub last_commit: Option<CommitInfo>,
     pub is_stale: bool,
     pub error: Option<String>,
+}
+
+impl RepoStatus {
+    pub fn dirty_count(&self) -> u32 {
+        self.staged + self.unstaged + self.untracked
+    }
+
+    pub fn divergence_count(&self) -> u32 {
+        self.ahead + self.behind
+    }
+
+    pub fn last_commit_timestamp(&self) -> i64 {
+        self.last_commit
+            .as_ref()
+            .map(|commit| commit.author_date.timestamp())
+            .unwrap_or(i64::MIN)
+    }
 }

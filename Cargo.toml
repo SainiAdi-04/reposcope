@@ -9,3 +9,5 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 git2 = "0.19"
 chrono = "0.4"
+ratatui = "0.28"
+crossterm = "0.28"

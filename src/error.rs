@@ -7,7 +7,7 @@ pub enum Error {
     NotARepo(String),
     DuplicatePath(String),
     NotFound(String),
-    Git(String),
+    Tui(String),
 }
 
 impl fmt::Display for Error {
@@ -18,7 +18,7 @@ impl fmt::Display for Error {
             Error::NotARepo(path) => write!(f, "not a git repository: {path}"),
             Error::DuplicatePath(path) => write!(f, "path already registered: {path}"),
             Error::NotFound(name) => write!(f, "no project found matching: {name}"),
-            Error::Git(msg) => write!(f, "git error: {msg}"),
+            Error::Tui(msg) => write!(f, "tui error: {msg}"),
         }
     }
 }
