@@ -168,7 +168,7 @@ fn status_note(status: &RepoStatus) -> &'static str {
 }
 
 fn render_footer(frame: &mut Frame<'_>, area: Rect) {
-    let footer = Paragraph::new("up/down navigate  r refresh  q quit")
+    let footer = Paragraph::new("up/down navigate  enter cd+quit  r refresh  q quit")
         .style(Style::default().fg(Color::Gray));
     frame.render_widget(footer, area);
 }

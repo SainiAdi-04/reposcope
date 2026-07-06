@@ -45,7 +45,13 @@ fn main() {
         None => match config::list_projects()
             .and_then(|projects| tui::run(projects).map_err(|e| error::Error::Tui(e.to_string())))
         {
-            Ok(()) => {}
+            Ok(target) => {
+                if cli.print_cd_target {
+                    if let Some(path) = target {
+                        println!("{}", path.display());
+                    }
+                }
+            }
             Err(e) => {
                 eprintln!("error: {e}");
                 std::process::exit(1);

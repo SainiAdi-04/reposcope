@@ -3,6 +3,10 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "reposcope", about = "Terminal dashboard for local git repos")]
 pub struct Cli {
+    /// Print the selected repository path on quit for shell wrapper integration
+    #[arg(long)]
+    pub print_cd_target: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

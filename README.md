@@ -24,7 +24,7 @@ reposcope
 ```
 
 `reposcope` with no subcommand opens the TUI dashboard. From there, use `up`/`down` to move,
-`r` to refresh, and `q` to quit.
+`enter` to quit and print the selected repo path, `r` to refresh, and `q` to quit.
 
 ## Configuration
 

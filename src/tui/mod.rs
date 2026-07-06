@@ -2,6 +2,7 @@ pub mod input;
 pub mod view;
 
 use std::io;
+use std::path::PathBuf;
 
 use crossterm::{
     execute,
@@ -46,6 +47,12 @@ impl App {
         self.selected = self.selected.saturating_sub(1);
     }
 
+    pub fn selected_project_path(&self) -> Option<PathBuf> {
+        self.statuses
+            .get(self.selected)
+            .map(|status| status.project.path.clone())
+    }
+
     fn clamp_selection(&mut self) {
         if self.statuses.is_empty() {
             self.selected = 0;
@@ -55,7 +62,7 @@ impl App {
     }
 }
 
-pub fn run(projects: Vec<Project>) -> io::Result<()> {
+pub fn run(projects: Vec<Project>) -> io::Result<Option<PathBuf>> {
     enable_raw_mode()?;
 
     let mut stdout = io::stdout();
@@ -72,12 +79,19 @@ pub fn run(projects: Vec<Project>) -> io::Result<()> {
     result
 }
 
-fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) -> io::Result<()> {
+fn run_app(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    mut app: App,
+) -> io::Result<Option<PathBuf>> {
     loop {
         terminal.draw(|frame| view::render(frame, &app))?;
 
-        if input::handle_event(&mut app)? {
-            return Ok(());
+        match input::handle_event(&mut app)? {
+            super::tui::input::Action::Continue => {}
+            super::tui::input::Action::Quit => return Ok(None),
+            super::tui::input::Action::QuitWithSelectedPath => {
+                return Ok(app.selected_project_path())
+            }
         }
     }
 }
