@@ -66,7 +66,7 @@ status` / `git log -1` output for both.
 
 ## Phase 7 (v1.1, optional/stretch) — Jump-to-directory (FR5)
 
-- [ ] `--print-cd-target` flag / dedicated key that, on quit, prints selected repo path to
+- [x] `--print-cd-target` flag / dedicated key that, on quit, prints selected repo path to
       stdout after terminal teardown.
 - [ ] Shell function wrapper documented and tested in your actual `.bashrc`/`.zshrc`.
 - **Acceptance**: Typing your shell alias, selecting a repo, pressing the jump key, and
