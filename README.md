@@ -50,9 +50,9 @@ reposcope() {
 
 ## Development
 
-```bash
-cargo fmt
-cargo clippy
-cargo build
-cargo build --release
-```
+If you change the code, these are the useful commands:
+
+- `cargo fmt` formats the code
+- `cargo clippy` checks for common mistakes
+- `cargo build` builds a normal debug version
+- `cargo build --release` builds the optimized version
