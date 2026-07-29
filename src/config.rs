@@ -47,8 +47,17 @@ fn save_config(config: &Config) -> Result<(), Error> {
     std::fs::write(&path, &contents).map_err(|e| Error::ConfigIo(e.to_string()))
 }
 
+fn expand_tilde(path: &std::path::Path) -> PathBuf {
+    if let Ok(strip) = path.strip_prefix("~") {
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home).join(strip);
+        }
+    }
+    path.to_path_buf()
+}
+
 pub fn add_project(path_str: &str) -> Result<(), Error> {
-    let path = PathBuf::from(path_str);
+    let path = expand_tilde(std::path::Path::new(path_str));
     let canonical =
         std::fs::canonicalize(&path).map_err(|_| Error::NotARepo(path_str.to_string()))?;
 
@@ -57,6 +66,9 @@ pub fn add_project(path_str: &str) -> Result<(), Error> {
     let mut config = load_config()?;
 
     for p in &config.projects {
+        if p.path == canonical {
+            return Err(Error::DuplicatePath(path_str.to_string()));
+        }
         if let Ok(existing) = std::fs::canonicalize(&p.path) {
             if existing == canonical {
                 return Err(Error::DuplicatePath(path_str.to_string()));
@@ -80,11 +92,14 @@ pub fn add_project(path_str: &str) -> Result<(), Error> {
 
 pub fn remove_project(name_or_path: &str) -> Result<(), Error> {
     let mut config = load_config()?;
-    let remove_path = PathBuf::from(name_or_path);
+    let remove_path = expand_tilde(std::path::Path::new(name_or_path));
     let len_before = config.projects.len();
 
     config.projects.retain(|p| {
-        if p.name == name_or_path {
+        if p.name == name_or_path
+            || p.path == remove_path
+            || p.path.to_string_lossy() == name_or_path
+        {
             return false;
         }
         if let Ok(canonical) = std::fs::canonicalize(&remove_path) {
