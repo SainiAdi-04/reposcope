@@ -12,10 +12,42 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 
 use crate::model::{Project, RepoStatus};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortMode {
+    Attention,
+    Name,
+    Recent,
+    Dirty,
+}
+
+impl SortMode {
+    pub fn next(self) -> Self {
+        match self {
+            SortMode::Attention => SortMode::Name,
+            SortMode::Name => SortMode::Recent,
+            SortMode::Recent => SortMode::Dirty,
+            SortMode::Dirty => SortMode::Attention,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            SortMode::Attention => "attention",
+            SortMode::Name => "name",
+            SortMode::Recent => "recent",
+            SortMode::Dirty => "dirty",
+        }
+    }
+}
+
 pub struct App {
     projects: Vec<Project>,
     pub statuses: Vec<RepoStatus>,
     pub selected: usize,
+    pub search_query: String,
+    pub is_searching: bool,
+    pub sort_mode: SortMode,
+    pub show_details: bool,
 }
 
 impl App {
@@ -24,6 +56,10 @@ impl App {
             projects,
             statuses: Vec::new(),
             selected: 0,
+            search_query: String::new(),
+            is_searching: false,
+            sort_mode: SortMode::Attention,
+            show_details: false,
         };
         app.refresh();
         app
@@ -31,33 +67,90 @@ impl App {
 
     pub fn refresh(&mut self) {
         self.statuses = crate::scanner::concurrency::scan_all(self.projects.clone());
-        sort_statuses(&mut self.statuses);
         self.clamp_selection();
     }
 
+    pub fn visible_statuses(&self) -> Vec<&RepoStatus> {
+        let query = self.search_query.trim().to_lowercase();
+        let mut filtered: Vec<&RepoStatus> = self
+            .statuses
+            .iter()
+            .filter(|s| {
+                if query.is_empty() {
+                    return true;
+                }
+                s.project.name.to_lowercase().contains(&query)
+                    || s.branch.label().to_lowercase().contains(&query)
+                    || s.last_commit
+                        .as_ref()
+                        .is_some_and(|c| c.summary.to_lowercase().contains(&query))
+                    || s.error
+                        .as_ref()
+                        .is_some_and(|e| e.to_lowercase().contains(&query))
+            })
+            .collect();
+
+        sort_statuses(&mut filtered, self.sort_mode);
+        filtered
+    }
+
     pub fn select_next(&mut self) {
-        if self.statuses.is_empty() {
+        let count = self.visible_statuses().len();
+        if count == 0 {
             return;
         }
-
-        self.selected = (self.selected + 1).min(self.statuses.len() - 1);
+        self.selected = (self.selected + 1).min(count - 1);
     }
 
     pub fn select_previous(&mut self) {
         self.selected = self.selected.saturating_sub(1);
     }
 
+    pub fn select_first(&mut self) {
+        self.selected = 0;
+    }
+
+    pub fn select_last(&mut self) {
+        let count = self.visible_statuses().len();
+        if count > 0 {
+            self.selected = count - 1;
+        }
+    }
+
+    pub fn select_page_down(&mut self, page: usize) {
+        let count = self.visible_statuses().len();
+        if count == 0 {
+            return;
+        }
+        self.selected = (self.selected + page).min(count - 1);
+    }
+
+    pub fn select_page_up(&mut self, page: usize) {
+        self.selected = self.selected.saturating_sub(page);
+    }
+
     pub fn selected_project_path(&self) -> Option<PathBuf> {
-        self.statuses
+        let visible = self.visible_statuses();
+        visible
             .get(self.selected)
             .map(|status| status.project.path.clone())
     }
 
-    fn clamp_selection(&mut self) {
-        if self.statuses.is_empty() {
+    pub fn cycle_sort(&mut self) {
+        self.sort_mode = self.sort_mode.next();
+        self.clamp_selection();
+    }
+
+    pub fn toggle_details(&mut self) {
+        self.show_details = !self.show_details;
+    }
+
+    pub fn clamp_selection(&mut self) {
+        let count = self.visible_statuses().len();
+        if count == 0 {
             self.selected = 0;
         } else {
-            self.selected = self.selected.min(self.statuses.len() - 1);
+            self.selected = self.selected.min(count - 1);
         }
     }
 }
@@ -96,17 +189,41 @@ fn run_app(
     }
 }
 
-fn sort_statuses(statuses: &mut [RepoStatus]) {
-    statuses.sort_by(|left, right| {
-        status_rank(left)
-            .cmp(&status_rank(right))
-            .then_with(|| {
+fn sort_statuses(statuses: &mut [&RepoStatus], mode: SortMode) {
+    match mode {
+        SortMode::Attention => {
+            statuses.sort_by(|left, right| {
+                status_rank(left)
+                    .cmp(&status_rank(right))
+                    .then_with(|| {
+                        right
+                            .last_commit_timestamp()
+                            .cmp(&left.last_commit_timestamp())
+                    })
+                    .then_with(|| left.project.name.cmp(&right.project.name))
+            });
+        }
+        SortMode::Name => {
+            statuses.sort_by(|left, right| left.project.name.cmp(&right.project.name));
+        }
+        SortMode::Recent => {
+            statuses.sort_by(|left, right| {
                 right
                     .last_commit_timestamp()
                     .cmp(&left.last_commit_timestamp())
-            })
-            .then_with(|| left.project.name.cmp(&right.project.name))
-    });
+                    .then_with(|| left.project.name.cmp(&right.project.name))
+            });
+        }
+        SortMode::Dirty => {
+            statuses.sort_by(|left, right| {
+                right
+                    .dirty_count()
+                    .cmp(&left.dirty_count())
+                    .then_with(|| status_rank(left).cmp(&status_rank(right)))
+                    .then_with(|| left.project.name.cmp(&right.project.name))
+            });
+        }
+    }
 }
 
 fn status_rank(status: &RepoStatus) -> u8 {
@@ -133,17 +250,16 @@ mod tests {
 
     #[test]
     fn sort_statuses_prioritizes_attention_then_recency() {
-        let mut statuses = vec![
-            status("clean-old", 0, 0, 0, false, 10),
-            status("stale", 0, 0, 0, true, 40),
-            status("diverged", 0, 1, 0, false, 20),
-            status("dirty-new", 1, 0, 0, false, 30),
-            status("dirty-old", 1, 0, 0, false, 5),
-        ];
+        let s1 = status("clean-old", 0, 0, 0, false, 10);
+        let s2 = status("stale", 0, 0, 0, true, 40);
+        let s3 = status("diverged", 0, 1, 0, false, 20);
+        let s4 = status("dirty-new", 1, 0, 0, false, 30);
+        let s5 = status("dirty-old", 1, 0, 0, false, 5);
 
-        sort_statuses(&mut statuses);
+        let mut refs = vec![&s1, &s2, &s3, &s4, &s5];
+        sort_statuses(&mut refs, SortMode::Attention);
 
-        let names: Vec<&str> = statuses
+        let names: Vec<&str> = refs
             .iter()
             .map(|status| status.project.name.as_str())
             .collect();
@@ -151,6 +267,27 @@ mod tests {
             names,
             vec!["dirty-new", "dirty-old", "diverged", "clean-old", "stale"]
         );
+    }
+
+    #[test]
+    fn visible_statuses_filters_by_query() {
+        let s1 = status("alpha-repo", 0, 0, 0, false, 10);
+        let s2 = status("beta-repo", 1, 0, 0, false, 20);
+        let s3 = status("gamma-tool", 0, 0, 0, false, 30);
+
+        let app = App {
+            projects: Vec::new(),
+            statuses: vec![s1, s2, s3],
+            selected: 0,
+            search_query: "repo".to_string(),
+            is_searching: false,
+            sort_mode: SortMode::Name,
+            show_details: false,
+        };
+
+        let visible = app.visible_statuses();
+        let names: Vec<&str> = visible.iter().map(|s| s.project.name.as_str()).collect();
+        assert_eq!(names, vec!["alpha-repo", "beta-repo"]);
     }
 
     fn status(
@@ -170,6 +307,7 @@ mod tests {
             branch: BranchState::Named("main".to_string()),
             ahead,
             behind,
+            has_upstream: true,
             staged: 0,
             unstaged,
             untracked: 0,
