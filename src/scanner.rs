@@ -31,6 +31,7 @@ pub fn scan_project(project: Project) -> RepoStatus {
                 branch: BranchState::Named(String::new()),
                 ahead: 0,
                 behind: 0,
+                has_upstream: false,
                 staged: 0,
                 unstaged: 0,
                 untracked: 0,
@@ -40,38 +41,52 @@ pub fn scan_project(project: Project) -> RepoStatus {
         }
     };
 
-    let head = match repo.head() {
-        Ok(h) => h,
+    let (head, branch, ahead, behind, has_upstream, last_commit) = match repo.head() {
+        Ok(h) => {
+            let branch = if h.is_branch() {
+                BranchState::Named(h.shorthand().unwrap_or("unknown").to_string())
+            } else {
+                BranchState::Detached(h.shorthand().unwrap_or("unknown").to_string())
+            };
+            let (ahead, behind, has_upstream) = compute_ahead_behind(&repo, &h);
+            let last_commit = h.peel_to_commit().ok().map(|c| CommitInfo {
+                short_hash: c.id().to_string()[..7].to_string(),
+                summary: c.summary().unwrap_or("").to_string(),
+                author_date: chrono::DateTime::from_timestamp(c.author().when().seconds(), 0)
+                    .unwrap_or_default(),
+            });
+            (Some(h), branch, ahead, behind, has_upstream, last_commit)
+        }
         Err(e) => {
-            return RepoStatus {
-                project,
-                error: Some(format!("read HEAD: {}", e.message())),
-                branch: BranchState::Named(String::new()),
-                ahead: 0,
-                behind: 0,
-                staged: 0,
-                unstaged: 0,
-                untracked: 0,
-                last_commit: None,
-                is_stale: false,
+            if let Some(target) = repo
+                .find_reference("HEAD")
+                .ok()
+                .and_then(|r| r.symbolic_target().map(|s| s.to_string()))
+            {
+                let name = target
+                    .strip_prefix("refs/heads/")
+                    .unwrap_or(&target)
+                    .to_string();
+                (None, BranchState::Named(name), 0, 0, false, None)
+            } else {
+                return RepoStatus {
+                    project,
+                    error: Some(format!("read HEAD: {}", e.message())),
+                    branch: BranchState::Named(String::new()),
+                    ahead: 0,
+                    behind: 0,
+                    has_upstream: false,
+                    staged: 0,
+                    unstaged: 0,
+                    untracked: 0,
+                    last_commit: None,
+                    is_stale: false,
+                };
             }
         }
     };
 
-    let branch = if head.is_branch() {
-        BranchState::Named(head.shorthand().unwrap_or("unknown").to_string())
-    } else {
-        BranchState::Detached(head.shorthand().unwrap_or("unknown").to_string())
-    };
-
-    let (ahead, behind) = compute_ahead_behind(&repo, &head);
-
-    let last_commit = head.peel_to_commit().ok().map(|c| CommitInfo {
-        short_hash: c.id().to_string()[..7].to_string(),
-        summary: c.summary().unwrap_or("").to_string(),
-        author_date: chrono::DateTime::from_timestamp(c.author().when().seconds(), 0)
-            .unwrap_or_default(),
-    });
+    let _ = head; // suppress unused warning if any
 
     let statuses = match repo.statuses(None) {
         Ok(s) => s,
@@ -81,6 +96,7 @@ pub fn scan_project(project: Project) -> RepoStatus {
                 branch,
                 ahead,
                 behind,
+                has_upstream,
                 last_commit,
                 error: Some(format!("read status: {}", e.message())),
                 staged: 0,
@@ -126,6 +142,7 @@ pub fn scan_project(project: Project) -> RepoStatus {
         branch,
         ahead,
         behind,
+        has_upstream,
         staged,
         unstaged,
         untracked,
@@ -154,35 +171,35 @@ fn is_stale(
     Utc::now().signed_duration_since(commit.author_date) > Duration::days(threshold_days.into())
 }
 
-fn compute_ahead_behind(repo: &git2::Repository, head: &git2::Reference) -> (u32, u32) {
+fn compute_ahead_behind(repo: &git2::Repository, head: &git2::Reference) -> (u32, u32, bool) {
     let local_oid = match head.peel_to_commit() {
         Ok(c) => c.id(),
-        Err(_) => return (0, 0),
+        Err(_) => return (0, 0, false),
     };
 
     let branch_name = match head.shorthand() {
         Some(n) => n,
-        None => return (0, 0),
+        None => return (0, 0, false),
     };
 
     let local_branch = match repo.find_branch(branch_name, git2::BranchType::Local) {
         Ok(b) => b,
-        Err(_) => return (0, 0),
+        Err(_) => return (0, 0, false),
     };
 
     let upstream = match local_branch.upstream() {
         Ok(u) => u,
-        Err(_) => return (0, 0),
+        Err(_) => return (0, 0, false),
     };
 
     let upstream_oid = match upstream.get().peel_to_commit() {
         Ok(c) => c.id(),
-        Err(_) => return (0, 0),
+        Err(_) => return (0, 0, true),
     };
 
     match repo.graph_ahead_behind(local_oid, upstream_oid) {
-        Ok((a, b)) => (a as u32, b as u32),
-        Err(_) => (0, 0),
+        Ok((a, b)) => (a as u32, b as u32, true),
+        Err(_) => (0, 0, true),
     }
 }
 
@@ -228,6 +245,23 @@ mod tests {
 
         assert!(status.error.is_none());
         assert!(!status.is_stale);
+
+        Ok(())
+    }
+
+    #[test]
+    fn empty_repo_unborn_branch_scans_without_error() -> Result<(), Box<dyn std::error::Error>> {
+        let path = unique_temp_path("unborn-repo")?;
+        fs::create_dir_all(&path)?;
+        Repository::init(&path)?;
+
+        let status = scan_project(project(path, None));
+
+        assert!(status.error.is_none());
+        assert!(!status.has_upstream);
+        assert_eq!(status.ahead, 0);
+        assert_eq!(status.behind, 0);
+        assert!(status.last_commit.is_none());
 
         Ok(())
     }

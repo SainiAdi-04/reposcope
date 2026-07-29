@@ -37,6 +37,7 @@ pub struct RepoStatus {
     pub branch: BranchState,
     pub ahead: u32,
     pub behind: u32,
+    pub has_upstream: bool,
     pub staged: u32,
     pub unstaged: u32,
     pub untracked: u32,

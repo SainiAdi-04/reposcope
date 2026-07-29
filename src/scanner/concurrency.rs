@@ -41,6 +41,7 @@ fn error_status(project: Project, message: &str) -> RepoStatus {
         branch: BranchState::Named(String::new()),
         ahead: 0,
         behind: 0,
+        has_upstream: false,
         staged: 0,
         unstaged: 0,
         untracked: 0,
